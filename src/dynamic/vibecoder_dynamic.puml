@@ -1,0 +1,40 @@
+@startuml vibecoder_dynamic
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+title Динамическая диаграмма — Генерация презентации по запросу маркетолога (локальное представление: Vibecoder)
+
+Person(marketer, "Маркетолог", "Готовит презентацию к выставке ЦИПР")
+Container(web_app, "Веб-приложение", "React / TypeScript", "Форма генерации презентаций")
+Container(api_gateway, "API-шлюз", "Nginx 1.25", "TLS, маршрутизация и проверка токена")
+Container(generation_service, "Сервис генерации материалов", "FastAPI / Celery / python-pptx", "Создаёт задания и формирует презентации")
+ContainerQueue(message_broker, "Брокер сообщений", "RabbitMQ 3.13", "Очередь заданий Celery и события")
+Container(core_api, "Сервис базы знаний (ядро)", "FastAPI", "Поиск фрагментов с учётом прав")
+Container(analytics_service, "Сервис аналитики и инсайтов", "FastAPI / pandas", "Рыночные индикаторы")
+Container(llm_server, "Локальный LLM-сервер", "vLLM", "Генерация структуры и текстов слайдов")
+ContainerDb(object_storage, "Объектное хранилище", "MinIO (S3 API)", "Шаблоны и готовые PPTX")
+
+Container_Boundary(agent_service, "ИИ-агент (agent_service)") {
+    Component(agent_api_comp, "API агента", "FastAPI", "Эндпоинт /complete")
+    Component(orchestrator_comp, "Оркестратор агента", "LangGraph", "Управляет графом RAG")
+    Component(retrieval_comp, "Инструмент поиска знаний", "httpx", "Поиск фрагментов с JWT пользователя")
+    Component(market_tool_comp, "Инструмент рыночных показателей", "httpx", "Получение отраслевых индикаторов")
+    Component(prompt_comp, "Сборщик промптов", "Jinja2", "Шаблон slides, контекст и источники")
+    Component(llm_comp, "Шлюз языковых моделей", "LLMGateway / Strategy", "LocalLLMStrategy, FallbackStrategy")
+}
+
+Rel(marketer, web_app, "1. Запрашивает презентацию: кейсы для ЦИПР, 10 слайдов", "HTTPS")
+Rel(web_app, api_gateway, "2. POST /api/v1/generation/jobs {task_type: slides, brief, slide_count: 10}", "HTTPS/JSON, TCP 443")
+Rel(api_gateway, generation_service, "3. Проксирует создание задания, возвращает job_id", "HTTP/JSON, TCP 8003")
+Rel(generation_service, message_broker, "4. Celery: generate_material(job_id)", "AMQP, TCP 5672")
+Rel(generation_service, agent_api_comp, "5. POST /api/v1/agent/complete", "HTTP/JSON, TCP 8002")
+Rel(agent_api_comp, orchestrator_comp, "6. AgentOrchestrator.complete(request, ctx)", "Python Call")
+Rel(orchestrator_comp, retrieval_comp, "7. KnowledgeRetriever.search_fragments(query, user_token, top_k=8)", "Python Call")
+Rel(retrieval_comp, core_api, "8. POST /api/v1/search/fragments, Bearer JWT → list[FragmentHit]", "HTTP/JSON, TCP 8000")
+Rel(orchestrator_comp, market_tool_comp, "9. MarketTool.get_indicators(industry, metrics, period)", "Python Call")
+Rel(market_tool_comp, analytics_service, "10. GET /api/v1/market/indicators → list[MarketIndicator]", "HTTP/JSON, TCP 8004")
+Rel(orchestrator_comp, prompt_comp, "11. PromptBuilder.build(template_id=slides, question=brief, fragments, indicators, history)", "Python Call")
+Rel(orchestrator_comp, llm_comp, "12. LLMGateway.generate(messages, params), LocalLLMStrategy", "Python Call")
+Rel(llm_comp, llm_server, "13. POST /v1/chat/completions", "HTTP/JSON (OpenAI API), TCP 8100")
+Rel(generation_service, object_storage, "14. S3 PUT materials/<id>.pptx", "HTTPS (S3 API), TCP 9000")
+Rel(generation_service, message_broker, "15. material.generated {material_id, job_id, author_id}", "AMQP, TCP 5672")
+@enduml

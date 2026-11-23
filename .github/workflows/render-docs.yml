@@ -6,6 +6,7 @@ on:
     paths: ['src/**/*.puml']
   pull_request:
     paths: ['src/**/*.puml']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -37,7 +38,7 @@ jobs:
           path: docs/images
 
       - name: Commit images (only main)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"

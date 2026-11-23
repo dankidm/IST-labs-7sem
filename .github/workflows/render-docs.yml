@@ -1,0 +1,46 @@
+name: Render PlantUML docs
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/**/*.puml']
+  pull_request:
+    paths: ['src/**/*.puml']
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Graphviz and PlantUML
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+          curl -L -o plantuml.jar https://github.com/plantuml/plantuml/releases/latest/download/plantuml.jar
+
+      - name: Check syntax
+        run: find src -name '*.puml' -print0 | xargs -0 java -jar plantuml.jar -checkonly -failonerror
+
+      - name: Render diagrams
+        run: |
+          mkdir -p docs/images
+          find src -name '*.puml' -print0 | xargs -0 java -jar plantuml.jar -tpng -o "$GITHUB_WORKSPACE/docs/images"
+
+      - name: Upload images as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagrams
+          path: docs/images
+
+      - name: Commit images (only main)
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add docs/images
+          git diff --cached --quiet || git commit -m "ci: update rendered diagrams [skip ci]"
+          git push

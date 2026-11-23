@@ -1,0 +1,65 @@
+@startuml vibecoder_deployment
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Deployment.puml
+LAYOUT_WITH_LEGEND()
+title Диаграмма развёртывания — Клиентский контур и ИИ-сервисы (локальный сегмент: Vibecoder)
+
+Deployment_Node(employee_pc, "Рабочее место сотрудника", "Windows / macOS") {
+    Deployment_Node(browser, "Браузер", "Chrome / Яндекс Браузер") {
+        Container(web_app, "Веб-приложение", "React / TypeScript (SPA)", "Поиск, чат, генерация материалов")
+    }
+}
+Deployment_Node(employee_phone, "Смартфон сотрудника", "iOS / Android") {
+    Deployment_Node(mobile_runtime, "Мобильная ОС", "iOS / Android") {
+        Container(mobile_app, "Мобильное приложение", "React Native (Expo)", "Поиск кейсов, чат, push")
+    }
+}
+
+Deployment_Node(datacenter, "ЦОД заказчика / облако", "Yandex Cloud VPC или закрытый контур") {
+    Deployment_Node(dmz_node, "Пограничный сервер (DMZ)", "Ubuntu 22.04 VM, публичный IP; открыт TCP 443") {
+        Container(api_gateway, "API-шлюз", "Nginx 1.25, TLS 1.3", "Round robin, health checks, проверка токенов")
+    }
+    Deployment_Node(app_node_1, "Сервер приложений 1", "Ubuntu 22.04, Docker 26; приватная подсеть") {
+        Container(agent_service_1, "ИИ-агент (экземпляр 1)", "FastAPI / LangGraph, TCP 8002", "RAG, оркестрация, LLMGateway")
+        Container(generation_service_1, "Сервис генерации (экземпляр 1)", "FastAPI / Celery, TCP 8003", "Генерация материалов и Celery-воркер")
+        Container(core_api_1, "Сервис базы знаний", "FastAPI, TCP 8000", "Поиск фрагментов с проверкой прав")
+        Container(analytics_service_1, "Сервис аналитики", "FastAPI, TCP 8004", "Рыночные показатели")
+    }
+    Deployment_Node(app_node_2, "Сервер приложений 2", "Ubuntu 22.04, Docker 26; приватная подсеть") {
+        Container(agent_service_2, "ИИ-агент (экземпляр 2)", "FastAPI / LangGraph, TCP 8002", "Резервный экземпляр агента")
+        Container(generation_service_2, "Сервис генерации (экземпляр 2)", "FastAPI / Celery, TCP 8003", "Резервный экземпляр с воркером")
+    }
+    Deployment_Node(gpu_node, "GPU-сервер", "Ubuntu 22.04, NVIDIA L40S, CUDA 12") {
+        Container(llm_server, "Локальный LLM-сервер", "vLLM, TCP 8100", "Генерация текста внутри контура")
+    }
+    Deployment_Node(data_node, "Сервер данных", "Ubuntu 22.04, Docker 26, SSD") {
+        ContainerDb(cache, "Кэш и сессии", "Redis 7, TCP 6379", "Контекст диалогов")
+        ContainerDb(object_storage, "Объектное хранилище", "MinIO, TCP 9000", "Шаблоны, PPTX/DOCX/PDF")
+        ContainerQueue(message_broker, "Брокер сообщений", "RabbitMQ 3.13, TCP 5672", "Celery и material.generated")
+    }
+    Deployment_Node(db_primary, "Сервер БД (основной)", "Ubuntu 22.04 / Managed PostgreSQL") {
+        ContainerDb(database, "Реляционная СУБД", "PostgreSQL 16, TCP 5432", "Диалоги, промпты, статусы заданий")
+    }
+    Deployment_Node(db_replica, "Сервер БД (реплика)", "Ubuntu 22.04 / Managed PostgreSQL") {
+        ContainerDb(database_replica, "Реплика PostgreSQL", "PostgreSQL 16, TCP 5432", "Горячий резерв и чтение")
+    }
+}
+System_Ext(llm_provider, "Внешние ИИ-сервисы", "GigaChat API / YandexGPT API через egress-прокси; в закрытом контуре отключены")
+
+Rel(web_app, api_gateway, "REST-запросы и стриминг ответа", "HTTPS/JSON, WSS, TLS 1.3, TCP 443")
+Rel(mobile_app, api_gateway, "REST-запросы и стриминг ответа", "HTTPS/JSON, WSS, TLS 1.3, TCP 443")
+Rel(api_gateway, agent_service_1, "Балансировка диалогов и стриминга", "HTTP/JSON, WebSocket, TCP 8002")
+Rel(api_gateway, agent_service_2, "Балансировка диалогов и стриминга", "HTTP/JSON, WebSocket, TCP 8002")
+Rel(api_gateway, generation_service_1, "Создание заданий и получение статуса", "HTTP/JSON, TCP 8003")
+Rel(api_gateway, generation_service_2, "Создание заданий и получение статуса", "HTTP/JSON, TCP 8003")
+Rel(agent_service_1, core_api_1, "Поиск фрагментов с учётом прав", "HTTP/JSON, TCP 8000")
+Rel(agent_service_1, analytics_service_1, "Получение рыночных показателей", "HTTP/JSON, TCP 8004")
+Rel(agent_service_1, llm_server, "LocalLLMStrategy: генерация", "HTTP/JSON (OpenAI API), TCP 8100")
+Rel(agent_service_1, llm_provider, "FallbackStrategy: облачный резерв (только SaaS)", "HTTPS/REST, TLS 1.2+, TCP 443")
+Rel(agent_service_1, cache, "Контекст диалога", "RESP/TCP, TCP 6379")
+Rel(agent_service_1, database, "История диалогов и шаблоны", "SQL/TCP, TLS, TCP 5432")
+Rel(generation_service_1, agent_service_1, "Запрашивает структуру и тексты слайдов", "HTTP/JSON, TCP 8002")
+Rel(generation_service_1, object_storage, "Читает шаблоны и сохраняет материалы", "HTTPS (S3 API), TCP 9000")
+Rel(generation_service_1, message_broker, "Очередь Celery, событие material.generated", "AMQP, TCP 5672")
+Rel(generation_service_1, database, "Статусы заданий и метаданные", "SQL/TCP, TLS, TCP 5432")
+Rel(database, database_replica, "Потоковая репликация WAL", "PostgreSQL streaming replication, TCP 5432")
+@enduml

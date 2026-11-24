@@ -18,13 +18,13 @@
 
 ## Общие архитектурные представления
 
-| Представление | Исходник | PNG после сборки |
+| Представление | Исходник | PNG в артефакте diagrams |
 | --- | --- | --- |
-| Контекст L1 | [main_context.puml](src/context/main_context.puml) | [main_context.png](docs/images/main_context.png) |
-| Контейнеры L2 | [main_containers.puml](src/containers/main_containers.puml) | [main_containers.png](docs/images/main_containers.png) |
-| Ландшафт L0 | [main_landscape.puml](src/landscape/main_landscape.puml) | [main_landscape.png](docs/images/main_landscape.png) |
-| Динамика | [dynamic_process.puml](src/dynamic/dynamic_process.puml) | [dynamic_process.png](docs/images/dynamic_process.png) |
-| Развёртывание L2 | [main_deployment.puml](src/deployment/main_deployment.puml) | [main_deployment.png](docs/images/main_deployment.png) |
+| Контекст L1 | [main_context.puml](src/context/main_context.puml) | `main_context.png` |
+| Контейнеры L2 | [main_containers.puml](src/containers/main_containers.puml) | `main_containers.png` |
+| Ландшафт L0 | [main_landscape.puml](src/landscape/main_landscape.puml) | `main_landscape.png` |
+| Динамика | [dynamic_process.puml](src/dynamic/dynamic_process.puml) | `dynamic_process.png` |
+| Развёртывание L2 | [main_deployment.puml](src/deployment/main_deployment.puml) | `main_deployment.png` |
 
 Это самостоятельные сводные представления. Локальные схемы участников
 сохранены рядом под префиксами `backend_`, `analyst_`, `vibecoder_`.
@@ -45,7 +45,8 @@
 ## Структура
 
 - `src` — исходники диаграмм по типам представлений.
-- `docs/images` — изображения, сформированные общей сборкой.
+- `docs/images` — сохранённые изображения прежней сборки; актуальные PNG публикуются
+  в артефакте `diagrams` каждого успешного запуска GitHub Actions.
 - `.github/workflows/render-docs.yml` — проверка и генерация документации.
 - `code/analyst_code` — прототип модуля экспорта со стратегиями CSV/XLSX/PDF.
 - `code/code_backend` — прототип гибридного поиска.
@@ -80,22 +81,23 @@ PlantUML Server является инструментом отрисовки а�
 
 ## Проверка и генерация в GitHub Actions
 
-Текущий workflow запускается на PR и на push в `main`, затрагивающих
-`src/**/*.puml`, а также вручную через `workflow_dispatch`.
+Workflow запускается на каждый PR в `main`, на push в `main` и вручную
+через `workflow_dispatch`. Фильтр по путям отсутствует: обязательная проверка
+доступна также для PR с изменениями документации или настроек сборки.
 
-1. Получает исходники и устанавливает Graphviz и PlantUML.
-2. Проверяет синтаксис всех `.puml` в `src`.
-3. Генерирует PNG в `docs/images`.
-4. Публикует артефакт `diagrams`.
-5. Вне PR выполняет коммит и push изображений в репозиторий.
+1. Получает исходники; настраивает Java 21, Graphviz и PlantUML.
+2. Проверяет наличие и синтаксис `.puml` в `src`; при ошибке шаг завершается с ошибкой.
+3. Генерирует PNG в отдельный временный каталог runner, без старых изображений.
+4. Выводит список и количество новых PNG в лог и публикует артефакт `diagrams`.
 
-До завершения сборки этого PR ссылки на новые PNG могут быть недоступны.
-В PR изображения доступны в артефакте успешной проверки; сохранение новых PNG
-в `main` выполняется последующей сборкой после слияния.
+У workflow права `contents: read`. Публикация выполняется через артефакты,
+поэтому защита `main` обязательными PR не препятствует сборке.
 
-Текущий шаг прямого push изображений необходимо согласовать с правилами
-защиты `main` до их включения. При обязательных PR для всех изменений
-публикацию PNG следует перевести на отдельный PR либо хранение в артефактах.
+Актуальные изображения находятся на странице нужного запуска
+[Render PlantUML docs](https://github.com/dankidm/IST-labs-7sem/actions/workflows/render-docs.yml)
+в разделе Artifacts → diagrams. Архив сохраняется в GitHub Actions на 90 дней;
+логи и итоговый архив следует скачать для отчёта и индивидуальной защиты.
+Имена файлов в таблице выше соответствуют содержимому артефакта.
 
 ## Порядок интеграции
 

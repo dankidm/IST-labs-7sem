@@ -1,0 +1,52 @@
+@startuml main_landscape
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+LAYOUT_WITH_LEGEND()
+
+title Сводный системный ландшафт — ИИ-платформа базы знаний и маркетинга (L0)
+' Восстановлено по отчёту ЛР4 тимлида; ID и связи сверены с main_context.
+
+Person(marketer, "Маркетолог", "Ищет кейсы и данные, общается с ИИ-агентом, генерирует презентации, КП, one-pager и посты")
+Person(bd_manager, "Менеджер по развитию бизнеса", "На выставках и встречах быстро находит кейсы по отрасли и отправляет материалы партнёрам с телефона")
+Person(marketing_head, "Руководитель маркетинга", "Согласует материалы, смотрит дашборды эффективности и рыночные дайджесты")
+Person(kb_editor, "Контент-менеджер базы знаний", "Загружает документы, ведёт карточки проектов, продуктов и кейсов, актуализирует данные")
+Person(analyst, "Аналитик рынка", "Подключает внешние источники, настраивает показатели, витрины и регламентные отчёты")
+Person(platform_admin, "Администратор платформы", "Пользователи, роли, коннекторы, мониторинг; в закрытом контуре — ИТ-служба заказчика")
+
+Enterprise_Boundary(customer_it, "ИТ-инфраструктура компании-заказчика") {
+  System(kb_platform, "ИИ-платформа базы знаний и маркетинга", "Единая платформа: корпоративная база знаний о продуктах, проектах и кейсах, интеграция рыночной аналитики, ИИ-агент (RAG) и генерация маркетинговых материалов")
+  System_Ext(crm_system, "CRM компании", "Битрикс24 / amoCRM: клиенты, сделки, кейсы внедрения")
+  System_Ext(corporate_idp, "Корпоративный каталог пользователей", "Active Directory / FreeIPA: учётные записи, группы, SSO")
+  System_Ext(doc_sources, "Корпоративные хранилища документов", "Файловые серверы (SMB), Nextcloud / Яндекс Диск, Confluence")
+  System_Ext(bi_platform, "BI-платформа", "Yandex DataLens / Apache Superset: ad-hoc дашборды поверх витрин")
+}
+
+System_Ext(market_sources, "Источники рыночной аналитики", "TAdviser, Strategy Partners, Росстат API, СПАРК-Интерфакс, RSS отраслевых СМИ")
+System_Ext(llm_provider, "Внешние ИИ-сервисы", "GigaChat API, YandexGPT API, Kandinsky: облачная генерация текста и изображений")
+System_Ext(payment_gateway, "Платёжный шлюз", "ЮKassa: рекуррентные платежи за SaaS-подписку")
+System_Ext(notification_gateway, "Сервисы доставки уведомлений", "SMTP-сервер, Telegram Bot API / Яндекс Мессенджер, FCM / APNs")
+
+' Внешняя LLM используется только в SaaS; в закрытом контуре вызовы запрещены.
+Rel(marketer, kb_platform, "Ищет знания, общается с ИИ-агентом, генерирует и редактирует материалы", "HTTPS/JSON, WSS")
+Rel(bd_manager, kb_platform, "Находит кейсы и готовые материалы с мобильного устройства", "HTTPS/JSON")
+Rel(marketing_head, kb_platform, "Согласует материалы, смотрит дашборды и дайджесты", "HTTPS/JSON")
+Rel(kb_editor, kb_platform, "Загружает документы, ведёт карточки проектов, продуктов и кейсов", "HTTPS/JSON")
+Rel(analyst, kb_platform, "Подключает источники рынка, настраивает показатели и витрины", "HTTPS/JSON")
+Rel(platform_admin, kb_platform, "Управляет пользователями, ролями, коннекторами, смотрит мониторинг", "HTTPS")
+Rel(analyst, bi_platform, "Строит ad-hoc дашборды поверх витрин", "HTTPS")
+Rel(kb_platform, doc_sources, "Синхронизирует документы по расписанию", "SMB 3 / WebDAV (HTTPS), REST")
+Rel(kb_platform, crm_system, "Запрашивает сделки и кейсы, прикрепляет КП к сделке", "HTTPS/REST")
+Rel(crm_system, kb_platform, "Сообщает о закрытии сделки (webhook)", "HTTPS/JSON")
+Rel(kb_platform, corporate_idp, "Проверяет учётные данные, синхронизирует группы сотрудников", "LDAPS, TCP 636")
+Rel(kb_platform, llm_provider, "Запросы генерации текста и изображений (облачный режим, резерв)", "HTTPS/REST")
+Rel(kb_platform, market_sources, "Забирает отчёты, рейтинги, новости и данные о компаниях", "HTTPS/REST, RSS")
+Rel(bi_platform, kb_platform, "Читает витрины данных (только чтение)", "SQL over HTTPS")
+Rel(kb_platform, payment_gateway, "Создаёт платёж за подписку", "HTTPS/REST")
+Rel(payment_gateway, kb_platform, "Сообщает статус платежа (webhook)", "HTTPS/JSON")
+Rel(kb_platform, notification_gateway, "Передаёт письма, сообщения и push на доставку, оповещения об инцидентах", "SMTP/TLS, HTTPS/REST")
+Rel(notification_gateway, marketer, "«Материал готов», «возвращён на доработку»", "E-mail, мессенджер")
+Rel(notification_gateway, bd_manager, "Push со ссылкой на готовый материал", "FCM / APNs")
+Rel(notification_gateway, marketing_head, "Запрос на согласование, еженедельный дайджест рынка", "E-mail (SMTP)")
+Rel(notification_gateway, kb_editor, "Напоминание актуализировать устаревший документ", "E-mail (SMTP)")
+Rel(notification_gateway, analyst, "Оповещение о сбое загрузки источника", "E-mail (SMTP)")
+Rel(notification_gateway, platform_admin, "Оповещения об инцидентах", "E-mail (SMTP)")
+@enduml

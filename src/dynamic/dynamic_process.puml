@@ -1,0 +1,48 @@
+@startuml dynamic_process
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+LAYOUT_WITH_LEGEND()
+
+title Сводная динамическая диаграмма — подготовка презентации и передача на согласование
+' Сценарий из отчёта ЛР4 тимлида, шаги 1–20.
+' Шаг 5: получение задания воркером из очереди подразумевается; API и воркер — один логический generation_service.
+' Стрелки 16 и 19 направлены от подписчика к брокеру, как в локальных диаграммах.
+' После шага 15 обработчики ядра и аналитики могут выполняться независимо; 16–20 — один допустимый порядок.
+
+Person(marketer, "Маркетолог", "Ищет кейсы и данные, общается с ИИ-агентом, генерирует материалы")
+Container(web_app, "Веб-приложение", "React 18 / TypeScript, Vite (SPA), Ant Design", "База знаний, поиск, чат с ИИ-агентом, генератор и редактор материалов, согласование, админ-раздел (доступ по ролям).")
+Container(api_gateway, "API-шлюз", "Nginx 1.25", "Единая точка входа: TLS 1.3, маршрутизация, проверка токена, rate limit, WebSocket, приём webhook и запросов BI.")
+Container(generation_service, "Сервис генерации материалов", "Python 3.12 / FastAPI, Celery, python-pptx, python-docx, WeasyPrint", "Презентации, КП, one-pager, посты по корпоративным шаблонам (асинхронные задания).")
+ContainerQueue(message_broker, "Брокер сообщений", "RabbitMQ 3.13 (AMQP)", "События между сервисами и очереди Celery.")
+Container(agent_service, "ИИ-агент", "Python 3.12 / FastAPI, LangGraph", "Оркестрация RAG: поиск фрагментов, вызов инструментов, сборка промпта, стриминг ответа со ссылками на источники.")
+Container(core_api, "Сервис базы знаний (ядро)", "Python 3.12 / FastAPI, SQLAlchemy 2.0", "Проекты, продукты, кейсы, документы, версии, права; гибридный поиск; согласование; CRM, уведомления, подписки.")
+ContainerDb(cache, "Кэш и сессии", "Redis 7", "Кэш поиска, контекст диалогов агента, лимиты.")
+ContainerDb(database, "Реляционная СУБД", "PostgreSQL 16", "Пользователи, проекты, кейсы, метаданные документов, материалы, диалоги, подписки.")
+ContainerDb(vector_db, "Векторная БД", "Qdrant 1.x", "Эмбеддинги фрагментов документов с метаданными прав доступа.")
+Container(analytics_service, "Сервис аналитики и инсайтов", "Python 3.12 / FastAPI, pandas", "Показатели, сопоставление проектов с рынком, дашборды, дайджесты, выгрузки XLSX/PDF.")
+ContainerDb(dwh, "Аналитическое хранилище", "ClickHouse 24", "Витрины: рыночные показатели, использование базы знаний, эффективность материалов.")
+Container(llm_server, "Локальный LLM-сервер", "vLLM (Qwen2.5 / T-lite) + bge-m3, GPU", "Генерация и эмбеддинги внутри контура, OpenAI-совместимый API.")
+ContainerDb(object_storage, "Объектное хранилище", "MinIO (S3 API)", "Оригиналы документов, шаблоны, сгенерированные материалы, сырые отчёты рынка.")
+Container(market_collector, "Сервис сбора рыночной аналитики (ETL)", "Python 3.12 / Apache Airflow, httpx, pandas", "По расписанию забирает рыночные данные и события использования, извлекает показатели, грузит витрины.")
+System_Ext(notification_gateway, "Сервисы доставки уведомлений", "SMTP, Telegram Bot API / Яндекс Мессенджер, FCM / APNs")
+
+Rel(marketer, web_app, "1. Задаёт бриф: презентация к выставке, 10 слайдов", "Действие в браузере")
+Rel(web_app, api_gateway, "2. POST /api/v1/generation/jobs", "HTTPS/JSON, TCP 443")
+Rel(api_gateway, generation_service, "3. Создаёт задание: job_id, статус queued; возвращает job_id клиенту", "HTTP/JSON, TCP 8003")
+Rel(generation_service, message_broker, "4. Ставит generate_material(job_id) в очередь Celery", "AMQP, TCP 5672")
+Rel(generation_service, agent_service, "5. Воркер после получения задания: POST /api/v1/agent/complete", "HTTP/JSON, TCP 8002")
+Rel(agent_service, core_api, "6. POST /api/v1/search/fragments + JWT; проверка прав до выдачи фрагментов", "HTTP/JSON, TCP 8000")
+Rel(core_api, cache, "7. GET search:<hash запроса и контекста доступа>; рассматривается промах", "RESP/TCP, TCP 6379")
+Rel(core_api, database, "8. При промахе кэша: полнотекстовый поиск с фильтром ACL", "SQL/TCP, TCP 5432")
+Rel(core_api, vector_db, "9. При промахе кэша: семантический поиск с фильтром ACL", "gRPC, TCP 6334")
+Rel(core_api, message_broker, "10. Публикует usage.event", "AMQP, TCP 5672")
+Rel(agent_service, analytics_service, "11. GET /api/v1/market/indicators; получает MarketIndicator", "HTTP/JSON, TCP 8004")
+Rel(analytics_service, dwh, "12. SELECT показателей из mart_market", "HTTP, TCP 8123")
+Rel(agent_service, llm_server, "13. LLMGateway.generate: структура и тексты слайдов с источниками", "HTTP/JSON (OpenAI API), TCP 8100")
+Rel(generation_service, object_storage, "14. Собирает PPTX и сохраняет materials/<material_id>.pptx", "HTTPS (S3 API), TCP 9000")
+Rel(generation_service, message_broker, "15. Публикует material.generated {material_id, job_id, author_id}", "AMQP, TCP 5672")
+Rel(core_api, message_broker, "16. Получает material.generated по подписке", "AMQP, TCP 5672")
+Rel(core_api, database, "17. Сохраняет материал и статус on_approval; дедупликация по material_id/job_id", "SQL/TCP, TCP 5432")
+Rel(core_api, notification_gateway, "18. Уведомляет согласующего; утверждение выполняется отдельным действием", "SMTP/TLS, TCP 465")
+Rel(market_collector, message_broker, "19. Получает material.generated для аналитики по подписке", "AMQP, TCP 5672")
+Rel(market_collector, dwh, "20. INSERT факта генерации в mart_materials", "HTTP, TCP 8123")
+@enduml

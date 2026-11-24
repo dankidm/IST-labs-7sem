@@ -21,9 +21,11 @@ System_Boundary(kb_platform, "ИИ-платформа базы знаний и �
   Container(analytics_service, "Сервис аналитики и инсайтов", "Python 3.12 / FastAPI, pandas", "Показатели, сопоставление проектов компании с рынком, дашборды, еженедельные дайджесты, выгрузки XLSX/PDF.")
   ContainerDb(dwh, "Аналитическое хранилище", "ClickHouse 24", "Витрины: рыночные показатели, использование базы знаний, эффективность материалов.")
 
-  ' === VIBECODER: клиентские приложения ===
+  ' === VIBECODER: клиентские приложения и ИИ-агент ===
   Container(web_app, "Веб-приложение", "React 18 / TypeScript, Vite (SPA), Ant Design", "База знаний, поиск, чат с ИИ-агентом, генератор материалов, согласование, раздел аналитики (доступ по ролям).")
   Container(mobile_app, "Мобильное приложение", "React Native (Expo) / TypeScript", "Быстрый поиск кейсов, чат с агентом, просмотр и отправка материалов, согласование, push.")
+
+  Container(agent_service, "ИИ-агент", "Python 3.12 / FastAPI, LangGraph", "Оркестрация RAG: поиск фрагментов, вызов инструментов, сборка промпта, стриминг ответа со ссылками на источники")
 
   ' === BACKEND ===
   Container(core_api, "Сервис базы знаний (ядро)", "Python 3.12 / FastAPI, SQLAlchemy 2.0", "Проекты, продукты, кейсы, документы, права; гибридный поиск; согласование; уведомления.")
@@ -78,6 +80,10 @@ Rel(core_api, message_broker, "Публикует document.uploaded, usage.event
 Rel(core_api, notification_gateway, "Отправляет письма, сообщения и push", "SMTP/TLS 465, HTTPS/REST")
 ' № инт. 37
 Rel(ingestion_service, message_broker, "Получает document.uploaded, market.report.ingested; публикует document.indexed", "AMQP, TCP 5672")
+
+' === СТЫК С ИИ-АГЕНТОМ: тот же ID и протокол, что на L3 ===
+' № инт. 44
+Rel(agent_service, analytics_service, "Запрашивает рыночные показатели (инструмент агента)", "HTTP/JSON, TCP 8004")
 
 ' === СВЯЗИ: СБОР РЫНОЧНОЙ АНАЛИТИКИ (ETL) ===
 ' № инт. 54

@@ -83,7 +83,7 @@ Rel(ingestion_service, message_broker, "Получает document.uploaded, mark
 
 ' === СТЫК С ИИ-АГЕНТОМ: тот же ID и протокол, что на L3 ===
 ' № инт. 44
-Rel(agent_service, analytics_service, "Запрашивает рыночные показатели (инструмент агента)", "HTTP/JSON, TCP 8004)
+Rel(agent_service, analytics_service, "Запрашивает рыночные показатели (инструмент агента)", "HTTP/JSON, TCP 8004")
 
 ' === СВЯЗИ: СБОР РЫНОЧНОЙ АНАЛИТИКИ (ETL) ===
 ' № инт. 54
